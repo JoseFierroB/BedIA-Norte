@@ -12,6 +12,13 @@ interface ProtocolDocument {
     tags: string[];
     content: string;
   }
+
+interface GRDMaster {
+    code: string;
+    name: string;
+    avgStay: number; // Days
+    complexity: 'Alta' | 'Media' | 'Baja';
+}
   
   const HOSPITAL_PROTOCOLS: ProtocolDocument[] = [
     {
@@ -37,7 +44,23 @@ interface ProtocolDocument {
       title: 'Flujo Normal de Altas',
       tags: ['flujo', 'normal', 'bajo', 'medio'],
       content: 'Objetivo diario: Liberar 15% de capacidad total antes de las 13:00 hrs. Gestionar ambulancias para traslados a domicilio el día previo.'
+    },
+    {
+      id: 'tpl-001',
+      title: 'Template Epicrisis Estándar',
+      tags: ['epicrisis', 'alta', 'documento'],
+      content: 'FORMATO EPICRISIS: 1. Resumen Ingreso (Motivo). 2. Evolución Clínica (Hitos, complicaciones). 3. Procedimientos realizados. 4. Indicaciones al Alta (Fármacos, control). 5. Signos de Alarma.'
     }
+  ];
+
+  // Mock GRD Database for Diagnosis Related Groups
+  export const GRD_DATABASE: GRDMaster[] = [
+      { code: 'GRD-121', name: 'Insuficiencia Cardíaca con CC', avgStay: 5.2, complexity: 'Alta' },
+      { code: 'GRD-089', name: 'Neumonía Simple / Pleuresía > 17 años', avgStay: 4.1, complexity: 'Media' },
+      { code: 'GRD-330', name: 'Apendicectomía Complicada', avgStay: 3.5, complexity: 'Media' },
+      { code: 'GRD-880', name: 'Accidente Cerebrovascular Isquémico', avgStay: 6.8, complexity: 'Alta' },
+      { code: 'GRD-035', name: 'Trastornos de la Vesícula Biliar', avgStay: 2.1, complexity: 'Baja' },
+      { code: 'GRD-540', name: 'Infecciones Renales y Urinarias', avgStay: 3.8, complexity: 'Media' }
   ];
   
   /**
@@ -47,9 +70,14 @@ interface ProtocolDocument {
   export const retrieveRelevantProtocols = (contextKeywords: string[]): ProtocolDocument[] => {
     // Simple keyword matching simulation
     const relevantDocs = HOSPITAL_PROTOCOLS.filter(doc => 
-      doc.tags.some(tag => contextKeywords.includes(tag))
+      doc.tags.some(tag => contextKeywords.includes(tag.toLowerCase()))
     );
     
     // Dedup and return
     return [...new Set(relevantDocs)];
+  };
+
+  export const findGRDMatch = (diagnosis: string): GRDMaster | undefined => {
+      const lowerD = diagnosis.toLowerCase();
+      return GRD_DATABASE.find(g => lowerD.includes(g.name.toLowerCase()) || g.name.toLowerCase().includes(lowerD));
   };

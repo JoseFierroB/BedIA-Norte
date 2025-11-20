@@ -55,3 +55,34 @@ export interface ChatMessage {
   text: string;
   timestamp: Date;
 }
+
+// --- NEW TYPES FOR AGENTIC FLOW ---
+
+export interface Patient {
+  id: string;
+  name: string; // Initials or Anonymized
+  age: number;
+  diagnosis: string;
+  admissionDate: Date;
+  bedNumber: string;
+  status: 'HOSPITALIZADO' | 'PRE_ALTA' | 'ALTA_DIGITAL' | 'TRASLADO_PENDIENTE';
+  grdCluster?: {
+    code: string;
+    name: string;
+    avgDays: number;
+    complexity: 'Baja' | 'Media' | 'Alta';
+  };
+  clinicalNotes?: string; // Context for Epicrisis
+}
+
+export interface UnstructuredInsight {
+  type: 'ALERT' | 'BED_BLOCK' | 'DISCHARGE' | 'SOCIAL';
+  description: string;
+  confidence: number;
+  actionItem: string;
+}
+
+export interface EpicrisisResult {
+  htmlContent: string; // Formatted document
+  summaryForTransfer: string; // Short version for WhatsApp/Radio
+}

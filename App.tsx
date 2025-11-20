@@ -1,107 +1,28 @@
 import React, { useState } from 'react';
-import { LayoutDashboard, BedDouble, Activity, Menu, X } from 'lucide-react';
+import { LayoutDashboard, BedDouble, Activity, Menu, X, BrainCircuit } from 'lucide-react';
 import { initialServiceData, getTotalStats } from './services/hospitalData';
 import { ServiceData } from './types';
-import MetricCard from './components/MetricCard';
 import DataEntryForm from './components/DataEntryForm';
 import BedAgent from './components/BedAgent';
+import AgenticCoordinator from './components/AgenticCoordinator';
+import Dashboard from './components/Dashboard';
 
 const App: React.FC = () => {
   const [services, setServices] = useState<ServiceData[]>(initialServiceData);
   const stats = getTotalStats(services);
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'input' | 'agent'>('dashboard');
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'input' | 'agent' | 'coordinator'>('dashboard');
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
-
-  // Determine global status color
-  const getGlobalStatusColor = () => {
-    if (stats.occupancyRate >= 95) return 'red';
-    if (stats.occupancyRate >= 85) return 'yellow';
-    return 'green';
-  };
 
   const renderContent = () => {
     switch (activeTab) {
       case 'dashboard':
-        return (
-          <div className="space-y-6 pb-20">
-            {/* Top Key Metrics - Horizontal Scroll on extremely small screens, Grid on Tablet */}
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-              <MetricCard 
-                title="Ocupación Total" 
-                value={`${stats.occupancyRate}%`} 
-                icon={Activity} 
-                color={getGlobalStatusColor()}
-                trend={`${stats.occupied}/${stats.totalBeds} camas`}
-              />
-              <MetricCard 
-                title="Espera Cama" 
-                value={stats.pending} 
-                icon={BedDouble} 
-                color="red" 
-                trend="Pacientes en Urgencia"
-              />
-              <MetricCard 
-                title="Altas Probables" 
-                value={stats.discharges} 
-                icon={Activity} 
-                color="green" 
-                trend="Próximas 24h"
-              />
-              <MetricCard 
-                title="Camas Bloqueadas" 
-                value={services.reduce((acc, s) => acc + s.blockedBeds, 0)} 
-                icon={BedDouble} 
-                color="slate" 
-                trend="Mantenimiento"
-              />
-            </div>
-
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-               {/* Occupancy Bars */}
-               <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
-                 <h3 className="font-bold text-slate-800 mb-5 text-lg">Ocupación por Servicio</h3>
-                 <div className="space-y-6">
-                   {services.map(s => (
-                     <div key={s.id}>
-                       <div className="flex justify-between text-sm mb-2">
-                         <span className="font-medium text-slate-700 text-base">{s.name}</span>
-                         <span className="text-slate-500 font-mono">{s.occupiedBeds}/{s.totalBeds} ({Math.round(s.occupiedBeds/s.totalBeds*100)}%)</span>
-                       </div>
-                       <div className="w-full bg-slate-100 rounded-full h-3">
-                         <div 
-                           className={`h-3 rounded-full ${s.occupiedBeds >= s.totalBeds ? 'bg-red-500' : 'bg-blue-600'}`} 
-                           style={{ width: `${Math.min((s.occupiedBeds/s.totalBeds)*100, 100)}%` }}
-                         ></div>
-                       </div>
-                     </div>
-                   ))}
-                 </div>
-               </div>
-               
-               {/* Quick Analysis Box */}
-               <div className="bg-gradient-to-br from-blue-50 to-indigo-50 p-6 rounded-xl border border-blue-100 flex flex-col justify-between">
-                 <div>
-                   <h3 className="font-bold text-blue-900 mb-3 text-lg">Estado del Hospital</h3>
-                   <p className="text-blue-800 text-base leading-relaxed mb-6">
-                     La ocupación global es del <strong>{stats.occupancyRate}%</strong>. 
-                     {stats.pending > 10 ? ' Se detecta congestión. Se requiere agilizar altas en servicios críticos.' : ' Flujo operativo estable.'}
-                   </p>
-                 </div>
-                 <button 
-                   onClick={() => setActiveTab('agent')}
-                   className="w-full py-4 bg-white text-blue-700 font-bold rounded-lg shadow-sm border border-blue-200 hover:bg-blue-50 active:bg-blue-100 transition-colors flex items-center justify-center gap-2"
-                 >
-                   <Activity size={20} />
-                   Ver recomendaciones de IA
-                 </button>
-               </div>
-            </div>
-          </div>
-        );
+        return <Dashboard services={services} setActiveTab={setActiveTab} />;
       case 'input':
         return <DataEntryForm services={services} onUpdate={setServices} />;
       case 'agent':
         return <BedAgent services={services} />;
+      case 'coordinator':
+        return <AgenticCoordinator />;
       default:
         return null;
     }
@@ -155,7 +76,12 @@ const App: React.FC = () => {
             <p className="px-4 text-xs font-bold text-slate-500 uppercase mb-2">Menu Principal</p>
             <SidebarItem id="dashboard" label="Panel de Control" icon={LayoutDashboard} />
             <SidebarItem id="input" label="Gestión de Censo" icon={BedDouble} />
-            <SidebarItem id="agent" label="Agente IA" icon={Activity} />
+          </div>
+
+          <div className="mb-8">
+            <p className="px-4 text-xs font-bold text-slate-500 uppercase mb-2">Inteligencia Artificial</p>
+            <SidebarItem id="agent" label="Orquestador Global" icon={Activity} />
+            <SidebarItem id="coordinator" label="Agente Clínico" icon={BrainCircuit} />
           </div>
         </nav>
 
@@ -184,7 +110,8 @@ const App: React.FC = () => {
             <span className="font-bold text-slate-800 text-lg">
               {activeTab === 'dashboard' && 'Resumen'}
               {activeTab === 'input' && 'Censo'}
-              {activeTab === 'agent' && 'Agente IA'}
+              {activeTab === 'agent' && 'Orquestador'}
+              {activeTab === 'coordinator' && 'Agente Clínico'}
             </span>
           </div>
           <div className={`w-3 h-3 rounded-full ${stats.occupancyRate >= 95 ? 'bg-red-500' : 'bg-green-500'}`}></div>
@@ -194,12 +121,16 @@ const App: React.FC = () => {
         <header className="hidden lg:flex p-8 pb-0 justify-between items-end mb-6">
           <div>
             <h2 className="text-3xl font-bold text-slate-800">
-              {activeTab === 'dashboard' && 'Resumen Operativo'}
+              {activeTab === 'dashboard' && 'Centro de Comando'}
               {activeTab === 'input' && 'Actualización de Censo'}
               {activeTab === 'agent' && 'Orquestador Inteligente'}
+              {activeTab === 'coordinator' && 'Coordinación Clínica Agéntica'}
             </h2>
             <p className="text-slate-500 mt-1">
-              Vista en tiempo real de la gestión de camas.
+              {activeTab === 'dashboard' && 'Supervisión en tiempo real y gestión de eventualidades.'}
+              {activeTab === 'coordinator' 
+                ? 'Gestión de GRD, Epicrisis Digital y Flujo de Urgencia.' 
+                : activeTab === 'input' ? 'Ingreso manual de datos por servicio.' : 'Análisis predictivo avanzado.'}
             </p>
           </div>
           <div className="text-right">
