@@ -1,5 +1,7 @@
 import { GoogleGenAI, Type } from "@google/genai";
-import { HospitalState, ServiceData, ServiceType } from "../types";
+import { HospitalState, ServiceData, ServiceType, AIAnalysis, RiskLevel } from "../types";
+import { runHeuristicModel } from "./mlEngine";
+import { retrieveRelevantProtocols } from "./knowledgeBase";
 
 // Initialize Gemini
 const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
@@ -15,32 +17,68 @@ const formatHospitalContext = (data: ServiceData[]): string => {
   })), null, 2);
 };
 
+// Utility to simulate processing time for better UX in prototype
+const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+
 /**
- * Agent Capability 1: Predictive Analysis
- * Takes current snapshot and uses reasoning to predict flow and suggest actions.
+ * ORCHESTRATOR: analyzeHospitalState
+ * 
+ * This function acts as the "Brain" that coordinates:
+ * 1. Classical ML (via mlEngine) for hard math and risk scoring.
+ * 2. RAG (via knowledgeBase) for institutional protocols.
+ * 3. LLM (Gemini) for synthesis and natural language generation.
+ * 4. Fallback logic if the LLM fails.
  */
-export const analyzeHospitalState = async (services: ServiceData[]) => {
-  const context = formatHospitalContext(services);
+export const analyzeHospitalState = async (
+  services: ServiceData[], 
+  onProgress?: (stage: string) => void
+): Promise<AIAnalysis> => {
   
+  // STEP 1: Run Classical ML (Deterministic/XGBoost Simulation)
+  if (onProgress) onProgress('ML_ENGINE');
+  await sleep(800); // Simulate calculation time
+  
+  const mlPrediction = runHeuristicModel(services);
+  
+  // STEP 2: RAG Retrieval
+  if (onProgress) onProgress('RAG_RETRIEVAL');
+  await sleep(800); // Simulate DB query time
+  
+  // Determine keywords based on ML findings
+  const keywords = [];
+  if (mlPrediction.calculatedRisk === RiskLevel.HIGH) keywords.push('colapso', 'critico');
+  if (mlPrediction.criticalServices.includes(ServiceType.URGENCIA)) keywords.push('urgencia');
+  if (mlPrediction.criticalServices.includes(ServiceType.UPC)) keywords.push('upc');
+  if (keywords.length === 0) keywords.push('normal');
+
+  const protocols = retrieveRelevantProtocols(keywords);
+  const ragContext = protocols.map(p => `- ${p.title}: ${p.content}`).join('\n');
+
+  // STEP 3: Construct Hybrid Prompt & Call LLM
+  if (onProgress) onProgress('LLM_GENERATION');
+  
+  const context = formatHospitalContext(services);
   const systemInstruction = `
-    You are BedAI, an intelligent bed management assistant for Hospital San José. 
-    Your goal is to help the Bed Manager (Gestor de Camas) optimize flow.
+    You are BedAI, an advanced Orchestrator for Hospital San José.
     
-    Context: 
-    - The hospital has no electronic records (HIS). Data is manual.
-    - Urgency (ER) is usually collapsed.
-    - You need to identify bottlenecks and suggest movements.
-    
-    Task:
-    1. Assess the global risk level (Low, Medium, Critical).
-    2. Predict total discharges in next 24h (combine manual input with a heuristic factor of ~10% variation).
-    3. Give 3 concrete recommendations for bed assignment or derivation.
+    INPUT DATA SOURCES:
+    1. Real-time Bed Data (JSON).
+    2. ML Engine Analysis: Risk=${mlPrediction.calculatedRisk}, Critical Nodes=${mlPrediction.criticalServices.join(',')}.
+    3. Institutional Protocols (RAG): 
+    ${ragContext}
+
+    TASK:
+    Synthesize these inputs. 
+    - Use the ML Risk Level as the absolute truth.
+    - Use the Protocols to justify your recommendations.
+    - Suggest 3 actionable moves.
   `;
 
   try {
+    // Call LLM (Gemini 2.5 Flash)
     const response = await ai.models.generateContent({
       model: 'gemini-2.5-flash',
-      contents: `Current Hospital Status (JSON): ${context}`,
+      contents: `Current Data: ${context}. ML Engine Stats: ${JSON.stringify(mlPrediction)}`,
       config: {
         systemInstruction: systemInstruction,
         responseMimeType: "application/json",
@@ -65,47 +103,69 @@ export const analyzeHospitalState = async (services: ServiceData[]) => {
       }
     });
 
-    return JSON.parse(response.text || "{}");
+    const llmResult = JSON.parse(response.text || "{}");
+
+    // Return Hybrid Result
+    return {
+      ...llmResult,
+      metadata: {
+        llmUsed: 'Gemini 2.5 Flash',
+        ragDocuments: protocols.map(p => p.title),
+        mlEngineUsed: true,
+        fallbackMode: false
+      }
+    };
+
   } catch (error) {
-    console.error("AI Analysis failed", error);
-    throw error;
+    console.error("Primary LLM Failed, switching to Fallback Mode", error);
+    
+    // STEP 4: FALLBACK MODE
+    return {
+      summary: "⚠️ MODO DE CONTINGENCIA: Servicio de IA Generativa no disponible. Mostrando datos calculados por motor heurístico.",
+      riskAssessment: {
+        level: mlPrediction.calculatedRisk,
+        reasoning: `Cálculo automático basado en saturación > ${(mlPrediction.systemStressScore * 100).toFixed(0)}% y nodos críticos: ${mlPrediction.criticalServices.join(', ') || 'Ninguno'}.`
+      },
+      recommendations: [
+        "Revisar protocolos de gestión (Ver Documentación RAG).",
+        "Priorizar altas en servicios con mayor demanda.",
+        "Contactar soporte técnico para restablecer IA Generativa."
+      ],
+      predictedDischarges24h: mlPrediction.predictedDischarges,
+      metadata: {
+        llmUsed: 'None (Fallback)',
+        ragDocuments: [],
+        mlEngineUsed: true,
+        fallbackMode: true
+      }
+    };
   }
 };
 
-/**
- * Agent Capability 2: Automated Official Reporting
- * Generates the text required for the daily report to the Health Service Direction.
- */
 export const generateOfficialReport = async (services: ServiceData[]) => {
   const context = formatHospitalContext(services);
-  
   try {
     const response = await ai.models.generateContent({
       model: 'gemini-2.5-flash',
-      contents: `Generate the "Reporte Diario de Gestión de Camas" based on this data: ${context}`,
+      contents: `Generate official report from: ${context}`,
       config: {
-        systemInstruction: "You are a strict administrative assistant. Generate a formal, concise report in Spanish for the Hospital Director and SSMN. Focus on critical nodes, occupancy rates, and immediate needs. Do not use markdown formatting, just plain text paragraphs.",
+        systemInstruction: "Generate a formal 'Reporte Diario de Gestión de Camas' for the Health Service Director. Spanish. Professional tone.",
         temperature: 0.3
       }
     });
     return response.text;
   } catch (error) {
-    console.error("Report generation failed", error);
-    return "Error generando el reporte. Por favor intente nuevamente.";
+    return "Error: No se pudo generar el reporte narrativo debido a una falla en el servicio de IA.";
   }
 };
 
-/**
- * Agent Capability 3: Natural Language Query
- * Allows the user to ask specific questions about the data.
- */
 export const chatWithBedAgent = async (history: any[], currentServices: ServiceData[], userMessage: string) => {
   const context = formatHospitalContext(currentServices);
-  
+  // Simple Chat wrapper
   const chat = ai.chats.create({
     model: 'gemini-2.5-flash',
     config: {
-      systemInstruction: `You are BedAI. You have access to real-time hospital bed data: ${context}. Answer the nurse's questions briefly and helpfully. If asked about available beds, specify the service.`
+      systemInstruction: `You are BedAI. Context: ${context}. Be helpful.`
     },
     history: history
   });

@@ -28,6 +28,14 @@ export interface HospitalState {
   lastUpdated: Date;
 }
 
+// Metadata to track which AI systems contributed to the answer
+export interface AIModelMetadata {
+  llmUsed: string; // e.g., "Gemini 2.5 Flash", "Llama-3 (Fallback)"
+  ragDocuments: string[]; // Protocol titles retrieved
+  mlEngineUsed: boolean; // Was the XGBoost/Heuristic engine used?
+  fallbackMode: boolean; // True if the primary LLM failed and we are showing raw ML data
+}
+
 // Structure for the AI Agent's analysis
 export interface AIAnalysis {
   summary: string;
@@ -36,7 +44,8 @@ export interface AIAnalysis {
     reasoning: string;
   };
   recommendations: string[];
-  predictedDischarges24h: number; // AI Prediction based on history logic
+  predictedDischarges24h: number;
+  metadata: AIModelMetadata; // Added metadata
 }
 
 // Input for the chat interface
