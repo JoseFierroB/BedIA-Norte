@@ -1,0 +1,5 @@
+{
+  "name": "BedAI Norte",
+  "description": "Gestor Predictivo de Camas con IA para Hospital San José. Centraliza datos, predice altas y asiste en la asignación de pacientes.",
+  "requestFramePermissions": []
+}
